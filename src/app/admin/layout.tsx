@@ -9,6 +9,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <Link href="/admin" className="font-semibold">cc-financial · admin</Link>
           <nav className="flex gap-4 text-sm">
             <Link href="/admin/months" className="hover:underline">Months</Link>
+            <Link href="/admin/profit-loss" className="hover:underline">G/V</Link>
             <Link href="/admin/income" className="hover:underline">Income</Link>
             <Link href="/admin/expenses" className="hover:underline">Expenses</Link>
             <Link href="/admin/recurring-expenses" className="hover:underline">Recurring</Link>
