@@ -33,6 +33,7 @@ export default async function GiveawaysListPage() {
               <th className="py-2 text-right">Estimated</th>
               <th className="py-2 text-right">Actual</th>
               <th className="py-2">Public</th>
+              <th className="py-2"></th>
             </tr>
           </thead>
           <tbody>
@@ -44,6 +45,9 @@ export default async function GiveawaysListPage() {
                 <td className="py-2 text-right tabular-nums">{r.estimatedValue?.toString() ?? "—"}</td>
                 <td className="py-2 text-right tabular-nums">{r.actualCost?.toString() ?? "—"}</td>
                 <td className="py-2">{r.public ? "yes" : "no"}</td>
+                <td className="py-2 text-right">
+                  <Link href={`/admin/giveaways/${r.id}`} className="text-xs text-neutral-500 hover:underline">Edit</Link>
+                </td>
               </tr>
             ))}
           </tbody>

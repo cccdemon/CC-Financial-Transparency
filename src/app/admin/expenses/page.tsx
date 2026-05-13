@@ -32,6 +32,7 @@ export default async function ExpensesListPage() {
               <th className="py-2 text-right">Amount</th>
               <th className="py-2">Description</th>
               <th className="py-2">Public</th>
+              <th className="py-2"></th>
             </tr>
           </thead>
           <tbody>
@@ -42,6 +43,9 @@ export default async function ExpensesListPage() {
                 <td className="py-2 text-right tabular-nums">{r.amount.toString()}</td>
                 <td className="py-2">{r.description ?? "—"}</td>
                 <td className="py-2">{r.public ? "yes" : "no"}</td>
+                <td className="py-2 text-right">
+                  <Link href={`/admin/expenses/${r.id}`} className="text-xs text-neutral-500 hover:underline">Edit</Link>
+                </td>
               </tr>
             ))}
           </tbody>

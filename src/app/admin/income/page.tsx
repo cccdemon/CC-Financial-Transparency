@@ -33,6 +33,7 @@ export default async function IncomeListPage() {
               <th className="py-2 text-right">Net</th>
               <th className="py-2">Confidence</th>
               <th className="py-2">Public</th>
+              <th className="py-2"></th>
             </tr>
           </thead>
           <tbody>
@@ -44,6 +45,9 @@ export default async function IncomeListPage() {
                 <td className="py-2 text-right tabular-nums">{r.netAmount?.toString() ?? "—"}</td>
                 <td className="py-2">{r.confidence}</td>
                 <td className="py-2">{r.public ? "yes" : "no"}</td>
+                <td className="py-2 text-right">
+                  <Link href={`/admin/income/${r.id}`} className="text-xs text-neutral-500 hover:underline">Edit</Link>
+                </td>
               </tr>
             ))}
           </tbody>
