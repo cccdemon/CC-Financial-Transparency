@@ -32,9 +32,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+# Replace the trimmed standalone node_modules with the full tree from the
+# builder. Cherry-picking just @prisma/.prisma/prisma misses transitive deps
+# (e.g. 'effect') that the Prisma CLI needs at startup for `db push`.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --chown=nextjs:nodejs docker/entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
