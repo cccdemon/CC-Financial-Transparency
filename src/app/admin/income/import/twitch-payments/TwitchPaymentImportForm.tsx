@@ -13,6 +13,9 @@ interface TwitchPaymentImportFormProps {
   importAction: (formData: FormData) => void | Promise<void>;
 }
 
+const MAX_FILE_BYTES = 100_000;
+const MAX_ROWS = 250;
+
 export function TwitchPaymentImportForm({ importAction }: TwitchPaymentImportFormProps) {
   const [csvText, setCsvText] = useState("");
   const [rows, setRows] = useState<ParsedRow[]>([]);
@@ -25,6 +28,11 @@ export function TwitchPaymentImportForm({ importAction }: TwitchPaymentImportFor
 
   async function handleFile(file: File | null) {
     if (!file) return;
+    if (file.size > MAX_FILE_BYTES) {
+      setRows([]);
+      setError("CSV file is too large.");
+      return;
+    }
     const text = await file.text();
     setCsvText(text);
     parseIntoRows(text);
@@ -33,6 +41,9 @@ export function TwitchPaymentImportForm({ importAction }: TwitchPaymentImportFor
   function parseIntoRows(text: string) {
     try {
       const parsed = parseBasicTwitchCsv(text).map((row) => ({ ...row, date: "" }));
+      if (parsed.length > MAX_ROWS) {
+        throw new Error("CSV contains too many rows.");
+      }
       setRows(parsed);
       setError(parsed.length === 0 ? "No payment rows found." : null);
     } catch (e) {

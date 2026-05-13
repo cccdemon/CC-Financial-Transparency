@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
+import { assertSameOriginRequest, safeAdminRedirect } from "@/lib/security";
 import { z } from "zod";
 
 const fundingTypeEnum = z.enum(["self", "community", "sponsor", "mixed"]);
@@ -28,12 +29,13 @@ export default async function EditGiveawayPage({
   if (!(await getAdminSession())) redirect("/admin/login");
   const { id } = await params;
   const { returnTo } = await searchParams;
-  const redirectTo = safeReturnTo(returnTo, "/admin/giveaways");
+  const redirectTo = safeAdminRedirect(returnTo, "/admin/giveaways");
   const row = await db.giveaway.findUnique({ where: { id } });
   if (!row) notFound();
 
   async function update(formData: FormData) {
     "use server";
+    await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
     const data = schema.parse(Object.fromEntries(formData));
     const occurredAt = new Date(data.occurredAt);
@@ -102,6 +104,7 @@ export default async function EditGiveawayPage({
 
   async function remove() {
     "use server";
+    await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
     await db.$transaction(async (tx) => {
       const existing = await tx.giveaway.findUnique({ where: { id } });
@@ -149,11 +152,6 @@ export default async function EditGiveawayPage({
       </form>
     </div>
   );
-}
-
-function safeReturnTo(value: string | undefined, fallback: string): string {
-  if (!value || !value.startsWith("/admin/") || value.startsWith("//")) return fallback;
-  return value;
 }
 
 function Input(props: { name: string; type: string; label: string; required?: boolean; step?: string; defaultValue?: string }) {

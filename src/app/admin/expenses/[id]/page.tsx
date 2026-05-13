@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
+import { assertSameOriginRequest, safeAdminRedirect } from "@/lib/security";
 import { z } from "zod";
 
 const expenseSourceEnum = z.enum(["giveaway", "hardware", "software", "hosting", "fees", "manual_other"]);
@@ -25,12 +26,13 @@ export default async function EditExpensePage({
   if (!(await getAdminSession())) redirect("/admin/login");
   const { id } = await params;
   const { returnTo } = await searchParams;
-  const redirectTo = safeReturnTo(returnTo, "/admin/expenses");
+  const redirectTo = safeAdminRedirect(returnTo, "/admin/expenses");
   const row = await db.expenseEvent.findUnique({ where: { id }, include: { giveaway: true } });
   if (!row) notFound();
 
   async function update(formData: FormData) {
     "use server";
+    await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
     const data = schema.parse(Object.fromEntries(formData));
     await db.expenseEvent.update({
@@ -50,6 +52,7 @@ export default async function EditExpensePage({
 
   async function remove() {
     "use server";
+    await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
     await db.expenseEvent.delete({ where: { id } });
     redirect(redirectTo);
@@ -92,11 +95,6 @@ export default async function EditExpensePage({
       </form>
     </div>
   );
-}
-
-function safeReturnTo(value: string | undefined, fallback: string): string {
-  if (!value || !value.startsWith("/admin/") || value.startsWith("//")) return fallback;
-  return value;
 }
 
 function Input(props: { name: string; type: string; label: string; required?: boolean; step?: string; defaultValue?: string }) {

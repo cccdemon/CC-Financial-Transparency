@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
+import { assertSameOriginRequest } from "@/lib/security";
 import { z } from "zod";
 
 const fundingTypeEnum = z.enum(["self", "community", "sponsor", "mixed"]);
@@ -24,6 +25,7 @@ export default async function NewGiveawayPage() {
 
   async function create(formData: FormData) {
     "use server";
+    await assertSameOriginRequest();
     const session = await getAdminSession();
     if (!session) redirect("/admin/login");
 

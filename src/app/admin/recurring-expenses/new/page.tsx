@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
+import { assertSameOriginRequest } from "@/lib/security";
 import { recurringExpenseSchema, RecurringExpenseForm } from "../recurring-expense-form";
 
 export default async function NewRecurringExpensePage() {
@@ -8,6 +9,7 @@ export default async function NewRecurringExpensePage() {
 
   async function create(formData: FormData) {
     "use server";
+    await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
     const data = recurringExpenseSchema.parse(Object.fromEntries(formData));
     await db.recurringExpense.create({

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth";
+import { assertSameOriginRequest } from "@/lib/security";
 import { getStoredTokens, clearTokens, listEventSubSubscriptions } from "@/lib/twitch";
 import { db } from "@/lib/db";
 
@@ -34,6 +35,7 @@ export default async function TwitchAdminPage({ searchParams }: PageProps) {
 
   async function disconnect() {
     "use server";
+    await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
     await clearTokens();
     redirect("/admin/twitch?disconnected=1");

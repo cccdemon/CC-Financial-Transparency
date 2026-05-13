@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/auth";
+import { assertSameOriginRequest } from "@/lib/security";
 import {
   createEventSubSubscription,
   defaultSubscriptionPlans,
@@ -7,6 +8,7 @@ import {
 } from "@/lib/twitch";
 
 export async function POST() {
+  await assertSameOriginRequest();
   const session = await getAdminSession();
   if (!session) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
+import { assertStrongProductionSecret } from "@/lib/security";
 
 const TWITCH_OAUTH_BASE = "https://id.twitch.tv";
 const TWITCH_HELIX = "https://api.twitch.tv/helix";
@@ -77,6 +78,7 @@ export function verifyOAuthState(received: string, signedCookie: string): boolea
 
 function signState(value: string): string {
   const secret = requireEnv("SESSION_SECRET");
+  assertStrongProductionSecret("SESSION_SECRET", secret);
   return createHmac("sha256", secret).update(`twitch-oauth:${value}`).digest("hex");
 }
 
@@ -195,6 +197,7 @@ export function verifyEventSubSignature(
   secret: string = process.env.TWITCH_EVENTSUB_SECRET ?? "",
 ): boolean {
   const { messageId, timestamp, signature } = headers;
+  assertStrongProductionSecret("TWITCH_EVENTSUB_SECRET", secret);
   if (!messageId || !timestamp || !signature || !secret) return false;
 
   const tsMs = Date.parse(timestamp);
@@ -322,5 +325,6 @@ export function defaultSubscriptionPlans(broadcasterId: string): RegisterPlan[] 
 function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`${name} is not set`);
+  if (name.includes("SECRET")) assertStrongProductionSecret(name, v);
   return v;
 }

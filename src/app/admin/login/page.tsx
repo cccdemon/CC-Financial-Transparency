@@ -1,24 +1,40 @@
 import { redirect } from "next/navigation";
 import { checkAdminCredentials, startAdminSession, getAdminSession } from "@/lib/auth";
+import {
+  assertSameOriginRequest,
+  clearLoginFailures,
+  isLoginRateLimited,
+  loginRateLimitKey,
+  recordLoginFailure,
+  safeAdminRedirect,
+} from "@/lib/security";
 
 export default async function LoginPage(props: {
   searchParams: Promise<{ redirect?: string; error?: string }>;
 }) {
   const sp = await props.searchParams;
+  const redirectTo = safeAdminRedirect(sp.redirect, "/admin");
   const existing = await getAdminSession();
   if (existing) {
-    redirect(sp.redirect ?? "/admin");
+    redirect(redirectTo);
   }
 
   async function loginAction(formData: FormData) {
     "use server";
+    await assertSameOriginRequest();
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
-    const redirectTo = String(formData.get("redirect") ?? "/admin");
+    const redirectTo = safeAdminRedirect(String(formData.get("redirect") ?? "/admin"), "/admin");
+    const rateLimitKey = await loginRateLimitKey(email);
+    if (isLoginRateLimited(rateLimitKey)) {
+      redirect(`/admin/login?error=rate_limited&redirect=${encodeURIComponent(redirectTo)}`);
+    }
     const ok = await checkAdminCredentials(email, password);
     if (!ok) {
+      recordLoginFailure(rateLimitKey);
       redirect(`/admin/login?error=invalid&redirect=${encodeURIComponent(redirectTo)}`);
     }
+    clearLoginFailures(rateLimitKey);
     await startAdminSession(email);
     redirect(redirectTo);
   }
@@ -35,7 +51,7 @@ export default async function LoginPage(props: {
             Invalid email or password.
           </p>
         )}
-        <input type="hidden" name="redirect" value={sp.redirect ?? "/admin"} />
+        <input type="hidden" name="redirect" value={redirectTo} />
         <Field name="email" type="email" label="Email" required />
         <Field name="password" type="password" label="Password" required />
         <button

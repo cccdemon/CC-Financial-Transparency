@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
+import { assertStrongProductionSecret } from "@/lib/security";
 
 const COOKIE_NAME = "cc-financial-admin";
 const COOKIE_MAX_AGE_S = 60 * 60 * 8; // 8 hours
@@ -12,6 +13,7 @@ function sign(value: string, secret: string): string {
 function buildSessionToken(email: string): string {
   const secret = process.env.SESSION_SECRET;
   if (!secret) throw new Error("SESSION_SECRET is not set");
+  assertStrongProductionSecret("SESSION_SECRET", secret);
   const payload = `${email}|${Date.now()}`;
   const sig = sign(payload, secret);
   return `${Buffer.from(payload).toString("base64url")}.${sig}`;
@@ -20,6 +22,7 @@ function buildSessionToken(email: string): string {
 export function verifySessionToken(token: string | undefined): { email: string } | null {
   if (!token) return null;
   const secret = process.env.SESSION_SECRET;
+  assertStrongProductionSecret("SESSION_SECRET", secret);
   if (!secret) return null;
   const [b64, sig] = token.split(".");
   if (!b64 || !sig) return null;

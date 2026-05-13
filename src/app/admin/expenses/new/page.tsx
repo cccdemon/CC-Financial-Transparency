@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
+import { assertSameOriginRequest } from "@/lib/security";
 import { z } from "zod";
 
 const expenseSourceEnum = z.enum(["giveaway", "hardware", "software", "hosting", "fees", "manual_other"]);
@@ -21,6 +22,7 @@ export default async function NewExpensePage() {
 
   async function create(formData: FormData) {
     "use server";
+    await assertSameOriginRequest();
     const session = await getAdminSession();
     if (!session) redirect("/admin/login");
 

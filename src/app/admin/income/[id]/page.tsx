@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
+import { assertSameOriginRequest, safeAdminRedirect } from "@/lib/security";
 import { z } from "zod";
 import type { IncomeSource, Confidence } from "@prisma/client";
 
@@ -37,12 +38,13 @@ export default async function EditIncomePage({
   if (!(await getAdminSession())) redirect("/admin/login");
   const { id } = await params;
   const { returnTo } = await searchParams;
-  const redirectTo = safeReturnTo(returnTo, "/admin/income");
+  const redirectTo = safeAdminRedirect(returnTo, "/admin/income");
   const row = await db.incomeEvent.findUnique({ where: { id } });
   if (!row) notFound();
 
   async function update(formData: FormData) {
     "use server";
+    await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
     const data = schema.parse(Object.fromEntries(formData));
     await db.incomeEvent.update({
@@ -63,6 +65,7 @@ export default async function EditIncomePage({
 
   async function remove() {
     "use server";
+    await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
     await db.incomeEvent.delete({ where: { id } });
     redirect(redirectTo);
@@ -97,11 +100,6 @@ export default async function EditIncomePage({
 
 function toLocalInput(d: Date): string {
   return d.toISOString().slice(0, 16);
-}
-
-function safeReturnTo(value: string | undefined, fallback: string): string {
-  if (!value || !value.startsWith("/admin/") || value.startsWith("//")) return fallback;
-  return value;
 }
 
 function Field(props: { name: string; label: string; type: string; required?: boolean; step?: string; defaultValue?: string }) {

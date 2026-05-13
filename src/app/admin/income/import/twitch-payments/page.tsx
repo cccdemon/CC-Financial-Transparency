@@ -4,9 +4,12 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
 import { parseTwitchPaymentHistoryCsv } from "@/lib/twitch-payment-import";
+import { assertSameOriginRequest } from "@/lib/security";
 import { TwitchPaymentImportForm } from "./TwitchPaymentImportForm";
 
 export const dynamic = "force-dynamic";
+const MAX_IMPORT_CHARS = 100_000;
+const MAX_IMPORT_ROWS = 250;
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -18,6 +21,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
 
   async function importPayments(formData: FormData) {
     "use server";
+    await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
 
     const pastedCsv = String(formData.get("csv") ?? "");
@@ -27,6 +31,9 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
     if (!pastedCsv.trim()) {
       redirect("/admin/income/import/twitch-payments?error=missing_csv");
     }
+    if (pastedCsv.length > MAX_IMPORT_CHARS) {
+      redirect("/admin/income/import/twitch-payments?error=file_too_large");
+    }
 
     let rows;
     try {
@@ -34,6 +41,9 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
     } catch (e) {
       const message = e instanceof Error ? e.message : "invalid_csv";
       redirect(`/admin/income/import/twitch-payments?error=${encodeURIComponent(message)}`);
+    }
+    if (rows.length > MAX_IMPORT_ROWS) {
+      redirect("/admin/income/import/twitch-payments?error=too_many_rows");
     }
 
     let imported = 0;

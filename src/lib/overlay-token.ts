@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { assertStrongProductionSecret } from "@/lib/security";
 
 // MVP: a single overlay token shared via PUBLIC_OVERLAY_TOKEN env var.
 // Per the spec, only the hash is stored — but for Phase 1 we accept the
@@ -7,6 +8,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 export function isOverlayTokenValid(input: string | null | undefined): boolean {
   const expected = process.env.PUBLIC_OVERLAY_TOKEN ?? "";
+  assertStrongProductionSecret("PUBLIC_OVERLAY_TOKEN", expected);
   if (!expected || !input) return false;
   const a = Buffer.from(input);
   const b = Buffer.from(expected);

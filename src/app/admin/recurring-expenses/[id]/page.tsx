@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
+import { assertSameOriginRequest } from "@/lib/security";
 import { recurringExpenseSchema, RecurringExpenseForm } from "../recurring-expense-form";
 
 export default async function EditRecurringExpensePage({ params }: { params: Promise<{ id: string }> }) {
@@ -11,6 +12,7 @@ export default async function EditRecurringExpensePage({ params }: { params: Pro
 
   async function update(formData: FormData) {
     "use server";
+    await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
     const data = recurringExpenseSchema.parse(Object.fromEntries(formData));
     await db.recurringExpense.update({
@@ -32,6 +34,7 @@ export default async function EditRecurringExpensePage({ params }: { params: Pro
 
   async function remove() {
     "use server";
+    await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
     await db.recurringExpense.delete({ where: { id } });
     redirect("/admin/recurring-expenses");

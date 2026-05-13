@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/auth";
 import { currentYear, isValidYear } from "@/lib/period";
 import { getProfitLossReport } from "@/lib/profit-loss";
+import { csvSafeCell } from "@/lib/security";
 
 export async function GET(request: Request) {
   if (!(await getAdminSession())) {
@@ -36,15 +37,10 @@ export async function GET(request: Request) {
     ]),
   ];
 
-  return new NextResponse(rows.map((row) => row.map(csvCell).join(",")).join("\n"), {
+  return new NextResponse(rows.map((row) => row.map(csvSafeCell).join(",")).join("\n"), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": `attachment; filename="gewinn-verlust-${year}.csv"`,
     },
   });
-}
-
-function csvCell(value: string): string {
-  if (!/[",\r\n]/.test(value)) return value;
-  return `"${value.replace(/"/g, '""')}"`;
 }
