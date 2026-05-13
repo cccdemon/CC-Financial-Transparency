@@ -16,7 +16,17 @@ export interface PublicMonthlySummary {
   netResult: number;
   confidence: ConfidenceLabel;
   sourceBreakdown: Record<IncomeSource, number>;
+  expenseItems: PublicExpenseItem[];
   updatedAt: string;
+}
+
+export interface PublicExpenseItem {
+  id: string;
+  source: string;
+  description: string;
+  amount: number;
+  currency: string;
+  recurring: boolean;
 }
 
 export async function getPublicMonthlySummary(period: string): Promise<PublicMonthlySummary> {
@@ -29,7 +39,7 @@ export async function getPublicMonthlySummary(period: string): Promise<PublicMon
     }),
     db.expenseEvent.findMany({
       where: { public: true, occurredAt: { gte: start, lt: end } },
-      select: { amount: true, source: true, updatedAt: true },
+      select: { id: true, amount: true, currency: true, source: true, description: true, updatedAt: true },
     }),
     db.giveaway.findMany({
       where: { public: true, occurredAt: { gte: start, lt: end } },
@@ -46,6 +56,24 @@ export async function getPublicMonthlySummary(period: string): Promise<PublicMon
   );
 
   const recurringExpenses = recurringInstancesForPeriod(recurringRules, period);
+  const expenseItems: PublicExpenseItem[] = [
+    ...expenseRows.map((row) => ({
+      id: row.id,
+      source: row.source,
+      description: row.description || labelForExpenseSource(row.source),
+      amount: row.amount.toNumber(),
+      currency: row.currency,
+      recurring: false,
+    })),
+    ...recurringExpenses.map((row) => ({
+      id: `recurring:${row.rule.id}`,
+      source: row.rule.source,
+      description: row.description,
+      amount: row.amount.toNumber(),
+      currency: row.currency,
+      recurring: true,
+    })),
+  ].sort((a, b) => a.description.localeCompare(b.description));
   const expenses = expenseRows
     .reduce((acc, row) => acc.add(row.amount), ZERO)
     .add(recurringExpenses.reduce((acc, row) => acc.add(row.amount), ZERO));
@@ -74,8 +102,16 @@ export async function getPublicMonthlySummary(period: string): Promise<PublicMon
     netResult: income.sub(expenses).toNumber(),
     confidence,
     sourceBreakdown,
+    expenseItems,
     updatedAt: (lastUpdated ?? new Date()).toISOString(),
   };
+}
+
+function labelForExpenseSource(source: string): string {
+  return source
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export interface MonthlyBreakdown {

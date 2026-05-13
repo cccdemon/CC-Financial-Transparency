@@ -22,6 +22,15 @@ const CONFIDENCE_LABEL: Record<string, string> = {
   unreviewed: "unreviewed",
 };
 
+const EXPENSE_LABELS: Record<string, string> = {
+  giveaway: "Giveaway",
+  hardware: "Hardware",
+  software: "Software",
+  hosting: "Hosting",
+  fees: "Fees",
+  manual_other: "Other",
+};
+
 export default async function FinancialPage() {
   const period = currentMonthPeriod();
   const summary = await getPublicMonthlySummary(period);
@@ -62,6 +71,35 @@ export default async function FinancialPage() {
                 <tr key={source} className="border-b last:border-0">
                   <td className="py-2">{SOURCE_LABELS[source] ?? source}</td>
                   <td className="py-2 text-right tabular-nums">{formatCurrency(amount, summary.currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-lg font-medium">Expenses</h2>
+        {summary.expenseItems.length === 0 ? (
+          <p className="text-sm text-neutral-500">No public expenses recorded yet this month.</p>
+        ) : (
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="py-2">Expense</th>
+                <th className="py-2">Type</th>
+                <th className="py-2 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.expenseItems.map((item) => (
+                <tr key={item.id} className="border-b last:border-0">
+                  <td className="py-2">
+                    <div className="font-medium">{item.description}</div>
+                    <div className="text-xs text-neutral-500">{EXPENSE_LABELS[item.source] ?? item.source}</div>
+                  </td>
+                  <td className="py-2 text-neutral-500">{item.recurring ? "recurring" : "one-time"}</td>
+                  <td className="py-2 text-right tabular-nums">{formatCurrency(item.amount, item.currency)}</td>
                 </tr>
               ))}
             </tbody>
