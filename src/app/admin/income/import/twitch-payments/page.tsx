@@ -46,6 +46,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
     }
 
     let imported = 0;
+    let updated = 0;
     let skipped = 0;
     let duplicates = 0;
 
@@ -55,20 +56,35 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
         continue;
       }
 
+      const data = {
+        source: "manual_twitch_payout" as const,
+        occurredAt: row.occurredAt ?? occurredAt,
+        grossAmount: row.amount,
+        netAmount: row.amount,
+        currency: row.currency,
+        confidence: row.status === "paid" ? "actual" as const : "unverified" as const,
+        public: publicRows,
+        description: `Twitch payout via ${row.paymentMethod} (${row.rawStatus})`,
+        externalId: row.externalId,
+      };
+
       try {
-        await db.incomeEvent.create({
-          data: {
-            source: "manual_twitch_payout",
-            occurredAt,
-            grossAmount: row.amount,
-            netAmount: row.amount,
-            currency: row.currency,
-            confidence: row.status === "paid" ? "actual" : "unverified",
-            public: publicRows,
-            description: `Twitch payout via ${row.paymentMethod} (${row.rawStatus})`,
-            externalId: row.externalId,
-          },
-        });
+        if (row.occurredAt && row.legacyExternalId !== row.externalId) {
+          const legacy = await db.incomeEvent.findUnique({
+            where: { externalId: row.legacyExternalId },
+            select: { id: true },
+          });
+          if (legacy) {
+            await db.incomeEvent.update({
+              where: { id: legacy.id },
+              data,
+            });
+            updated += 1;
+            continue;
+          }
+        }
+
+        await db.incomeEvent.create({ data });
         imported += 1;
       } catch (e) {
         if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -81,6 +97,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
 
     const params = new URLSearchParams({
       imported: String(imported),
+      updated: String(updated),
       skipped: String(skipped),
       duplicates: String(duplicates),
     });
@@ -95,7 +112,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
         </Link>
         <h1 className="text-xl font-semibold">Import Twitch payment history</h1>
         <p className="text-sm text-neutral-500">
-          Upload the Twitch payment history CSV with columns Amount submitted, Payment method, and Status.
+          Upload the Twitch payment history CSV or paste the German payout history table with Genehmigungsdatum.
         </p>
       </div>
 
@@ -106,7 +123,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
       )}
       {sp.imported !== undefined && (
         <p className="rounded border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
-          Imported {String(sp.imported)} rows. Skipped {String(sp.skipped ?? 0)}. Duplicates {String(sp.duplicates ?? 0)}.
+          Imported {String(sp.imported)} rows. Updated {String(sp.updated ?? 0)}. Skipped {String(sp.skipped ?? 0)}. Duplicates {String(sp.duplicates ?? 0)}.
         </p>
       )}
 
@@ -127,7 +144,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
             name="csv"
             rows={8}
             className="block w-full rounded border border-neutral-300 px-3 py-2 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-950"
-            placeholder={`Amount submitted,Payment method,Status\n"USD 208,97",PayPal,Bezahlt`}
+            placeholder={`Genehmigungsdatum\nBezahlter Betrag,Auszahlungsmethode,Status\n13 April 2026\nUSD 208,97\nPayPal\nBezahlt`}
           />
         </label>
 
@@ -140,7 +157,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
             className="block w-full rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
           />
           <span className="text-xs text-neutral-500">
-            Twitch export rows do not include dates, so this date is applied to every imported row.
+            Used only for CSV exports that do not include a per-row approval date.
           </span>
         </label>
 
