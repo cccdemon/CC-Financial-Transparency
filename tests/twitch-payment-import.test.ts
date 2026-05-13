@@ -7,6 +7,12 @@ const CSV = `Amount submitted,Payment method,Status
 "USD 51,72",PayPal,Bezahlt
 `;
 
+const MONTHLY_CSV = `Month,Amount submitted,Payment method,Status
+2026-04,"USD 208,97",PayPal,Bezahlt
+2026-03,"USD 200,41",PayPal,Bezahlt
+2025-12,"USD 354,60",PayPal,Bezahlt
+`;
+
 const GERMAN_HISTORY = `Genehmigungsdatum
 Bezahlter Betrag,Auszahlungsmethode,Status
 13 Mai 2026
@@ -72,6 +78,28 @@ describe("parseTwitchPaymentHistoryCsv", () => {
 
     expect(rows[2].externalId).not.toBe(rows[3].externalId);
     expect(parseTwitchPaymentHistoryCsv(CSV)[2].externalId).toBe(rows[2].externalId);
+  });
+
+  it("parses plain CSV with a per-row month column", () => {
+    const rows = parseTwitchPaymentHistoryCsv(MONTHLY_CSV);
+
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatchObject({
+      amount: 208.97,
+      currency: "USD",
+      status: "paid",
+    });
+    expect(rows[0].occurredAt?.toISOString()).toBe("2026-04-01T12:00:00.000Z");
+    expect(rows[1].occurredAt?.toISOString()).toBe("2026-03-01T12:00:00.000Z");
+    expect(rows[2].occurredAt?.toISOString()).toBe("2025-12-01T12:00:00.000Z");
+  });
+
+  it("parses plain CSV with a per-row German approval date column", () => {
+    const rows = parseTwitchPaymentHistoryCsv(
+      `Genehmigungsdatum,Amount submitted,Payment method,Status\n13 April 2026,"USD 208,97",PayPal,Bezahlt\n`,
+    );
+
+    expect(rows[0].occurredAt?.toISOString()).toBe("2026-04-13T12:00:00.000Z");
   });
 
   it("parses German Twitch payout history with per-row approval dates", () => {

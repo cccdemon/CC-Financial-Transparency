@@ -112,7 +112,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
         </Link>
         <h1 className="text-xl font-semibold">Import Twitch payment history</h1>
         <p className="text-sm text-neutral-500">
-          Upload the Twitch payment history CSV or paste the German payout history table with Genehmigungsdatum.
+          Upload Twitch payment history. Plain CSV can include Date, Month, Approval date, or Genehmigungsdatum per row.
         </p>
       </div>
 
@@ -144,7 +144,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
             name="csv"
             rows={8}
             className="block w-full rounded border border-neutral-300 px-3 py-2 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-950"
-            placeholder={`Genehmigungsdatum\nBezahlter Betrag,Auszahlungsmethode,Status\n13 April 2026\nUSD 208,97\nPayPal\nBezahlt`}
+            placeholder={`Month,Amount submitted,Payment method,Status\n2026-04,"USD 208,97",PayPal,Bezahlt\n2026-03,"USD 200,41",PayPal,Bezahlt`}
           />
         </label>
 
@@ -157,7 +157,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
             className="block w-full rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
           />
           <span className="text-xs text-neutral-500">
-            Used only for CSV exports that do not include a per-row approval date.
+            Used only for uploads that do not include a per-row Date, Month, Approval date, or Genehmigungsdatum column.
           </span>
         </label>
 
