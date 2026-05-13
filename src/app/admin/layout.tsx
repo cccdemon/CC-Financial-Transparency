@@ -11,6 +11,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <Link href="/admin/income" className="hover:underline">Income</Link>
             <Link href="/admin/expenses" className="hover:underline">Expenses</Link>
             <Link href="/admin/giveaways" className="hover:underline">Giveaways</Link>
+            <Link href="/admin/twitch" className="hover:underline">Twitch</Link>
             <form action="/api/admin/logout" method="post">
               <button type="submit" className="text-sm text-neutral-500 hover:underline">Sign out</button>
             </form>
