@@ -21,3 +21,20 @@ export function periodBounds(period: string): { start: Date; end: Date } {
   const end = new Date(Date.UTC(y, m, 1));
   return { start, end };
 }
+
+export function currentYear(now = new Date()): number {
+  return now.getUTCFullYear();
+}
+
+export function isValidYear(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 2000 && value <= 2100;
+}
+
+export function yearBounds(year: number): { start: Date; end: Date } {
+  if (!isValidYear(year)) {
+    throw new Error(`Invalid year: ${year}`);
+  }
+  const start = new Date(Date.UTC(year, 0, 1));
+  const end = new Date(Date.UTC(year + 1, 0, 1));
+  return { start, end };
+}

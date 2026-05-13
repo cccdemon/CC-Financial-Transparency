@@ -72,6 +72,7 @@ export default async function FinancialPage() {
       <p className="text-xs text-neutral-500">
         Values are estimates derived from Twitch signals and manually-entered ledger rows. Final payout
         amounts are confirmed during monthly review. See{" "}
+        <Link href="/financial/year" className="underline">yearly overview</Link> or{" "}
         <Link href="/financial/giveaways" className="underline">giveaways</Link>.
       </p>
     </main>
