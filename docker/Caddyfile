@@ -1,0 +1,45 @@
+# Bundled Caddy config for cc-financial.
+#
+# Topology:
+#   internet → front-edge nginx :443 (SNI passthrough, ssl_preread)
+#            → this Caddy        :3100 (terminates TLS, reverse-proxies)
+#            → cc-financial-web  :3000 (Next.js, docker network only)
+#
+# Cert acquisition: Let's Encrypt TLS-ALPN-01 only. Port 80 is intentionally
+# NOT exposed — the front-edge nginx routes 443 SNI for this hostname to :3100,
+# so ACME validators reach this Caddy via the same path.
+
+{
+	email {$CADDY_ACME_EMAIL}
+	# No port 80 listener — disable the auto-generated HTTP→HTTPS redirect.
+	auto_https disable_redirects
+}
+
+{$PUBLIC_HOSTNAME}:3100 {
+	encode zstd gzip
+
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+
+	@admin path /admin*
+	@overlay path /overlay*
+	header @admin   X-Robots-Tag "noindex, nofollow"
+	header @overlay X-Robots-Tag "noindex, nofollow"
+
+	handle /robots.txt {
+		respond "User-agent: *
+Disallow: /overlay/
+Disallow: /admin/
+" 200
+	}
+
+	reverse_proxy web:3000
+
+	log {
+		output stdout
+		format json
+	}
+}

@@ -1,24 +1,53 @@
-# Deploy: financials.raumdock.org
+# Deploy: financial.raumdock.org
 
 End-to-end runbook for deploying `cc-financial` next to the existing
-Server-Tech stack. Targets a Linux host with Docker + Caddy already running.
+Server-Tech stack. Targets the `10.10.10.99` LXC behind your front-edge
+nginx SNI router.
 
-## 1. DNS
-
-Add to your DNS provider for `raumdock.org`:
+## Topology
 
 ```
-financials   A      <server-public-ipv4>
-financials   AAAA   <server-public-ipv6>   # optional
+internet
+  └─ front-edge nginx :443     (SNI passthrough, ssl_preread on)
+       └─ 10.10.10.99:3100     (this LXC, this stack)
+            └─ caddy:3100      (terminates TLS — Let's Encrypt TLS-ALPN-01)
+                 └─ web:3000   (Next.js, docker network only)
+                      └─ postgres:5432 (docker network only)
 ```
 
-Wait for propagation (`dig +short financials.raumdock.org` should return the
-server IP) before touching Caddy — Let's Encrypt cert issuance will fail
-otherwise.
+The front-edge does **not** terminate TLS for this hostname. The Caddy
+container in this stack does, using **TLS-ALPN-01 only** (port 80 is not
+routed to us, so HTTP-01 is intentionally disabled).
 
-## 2. Server prep
+## 1. Front-edge nginx
 
-Pick a deploy directory (e.g. `/opt/cc-financial`) and clone the repo:
+Already configured per the existing pattern — confirm the stream map has:
+
+```nginx
+map $ssl_preread_server_name $upstream_backend {
+    financial.raumdock.org financial_lxc;
+}
+
+upstream financial_lxc {
+    server 10.10.10.99:3100;
+}
+```
+
+Reload nginx after editing: `nginx -t && systemctl reload nginx`.
+
+## 2. DNS
+
+```
+financial   A      <public-ipv4-of-front-edge>
+financial   AAAA   <public-ipv6-of-front-edge>   # optional
+```
+
+Verify with `dig +short financial.raumdock.org` before starting the stack —
+Let's Encrypt cert issuance will fail otherwise.
+
+## 3. LXC prep
+
+Pick a deploy directory on `10.10.10.99` (e.g. `/opt/cc-financial`) and clone:
 
 ```bash
 sudo mkdir -p /opt/cc-financial && sudo chown "$USER" /opt/cc-financial
@@ -26,82 +55,79 @@ git clone https://github.com/cccdemon/CC-Financial-Transparency.git /opt/cc-fina
 cd /opt/cc-financial
 ```
 
-## 3. Generate secrets
+Confirm port `3100` is free on the LXC (nothing else binding it):
 
 ```bash
-# Random session secret
-openssl rand -hex 32        # → SESSION_SECRET
-
-# Random overlay token (you'll paste this into OBS Browser Source URLs)
-openssl rand -hex 32        # → PUBLIC_OVERLAY_TOKEN
-
-# Strong Postgres password
-openssl rand -base64 32     # → POSTGRES_PASSWORD
-
-# Admin password hash (bcrypt)
-docker run --rm -i node:20-alpine sh -c 'npm i -s bcryptjs >/dev/null 2>&1 && node -e "console.log(require(\"bcryptjs\").hashSync(process.argv[1], 12))" "your-admin-password"'
+ss -tlnp | grep ':3100'   # should be empty
 ```
 
-## 4. .env.production
+## 4. Generate secrets
+
+```bash
+openssl rand -hex 32             # → SESSION_SECRET
+openssl rand -hex 32             # → PUBLIC_OVERLAY_TOKEN
+openssl rand -base64 32          # → POSTGRES_PASSWORD
+
+# Admin password hash (bcrypt)
+docker run --rm -i node:20-alpine sh -c \
+  'npm i -s bcryptjs >/dev/null 2>&1 && node -e "console.log(require(\"bcryptjs\").hashSync(process.argv[1], 12))" "your-admin-password"'
+```
+
+## 5. .env.production
 
 ```bash
 cp .env.production.example .env.production
-nano .env.production         # paste in the values from step 3
+nano .env.production
 ```
 
 Required: `POSTGRES_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`,
-`SESSION_SECRET`, `PUBLIC_OVERLAY_TOKEN`. `WEB_HOST_PORT` defaults to **3100**;
-change if that port is already taken on the host (it binds to `127.0.0.1` only,
-so it won't be publicly reachable directly).
+`SESSION_SECRET`, `PUBLIC_OVERLAY_TOKEN`, `CADDY_ACME_EMAIL`.
 
-## 5. Start the stack
+`CADDY_HOST_PORT` defaults to **3100** — only change it if you also change the
+front-edge nginx upstream to match.
+
+## 6. Start the stack
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-docker compose -f docker-compose.prod.yml logs -f web
+docker compose -f docker-compose.prod.yml logs -f
 ```
 
-The container entrypoint runs `prisma db push` automatically, creating the
-schema on first boot. Look for `schema in sync, launching app` followed by
-Next.js's `Ready in <ms>` line.
+What happens on first boot:
 
-Sanity check from the host:
+1. Postgres starts and passes its healthcheck.
+2. Web entrypoint runs `prisma db push` → tables created.
+3. Web logs `Ready in <ms>`.
+4. Caddy starts, asks Let's Encrypt for a cert via TLS-ALPN-01. The validator
+   connects to `financial.raumdock.org:443` → front-edge nginx → `10.10.10.99:3100`
+   → Caddy answers the ALPN challenge. Cert lands in the `cc_financial_caddy_data`
+   volume.
+5. `https://financial.raumdock.org/` resolves to `/financial`.
 
-```bash
-curl -sf http://127.0.0.1:3100/api/public/financial-summary | jq
-```
-
-## 6. Wire up Caddy
-
-Append the contents of `Caddyfile.snippet` to your existing `Caddyfile`
-(usually `/etc/caddy/Caddyfile`), adjust the upstream address if Caddy itself
-runs inside a container that can't reach `127.0.0.1`, then:
+Sanity checks:
 
 ```bash
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy
-```
+# From inside the LXC — bypass nginx, talk to Caddy directly:
+curl -ksfI https://localhost:3100/financial -H 'Host: financial.raumdock.org'
 
-Caddy will fetch a Let's Encrypt cert automatically. Verify:
-
-```bash
-curl -sfI https://financials.raumdock.org/financial
+# From anywhere on the internet — full path:
+curl -sfI https://financial.raumdock.org/financial
 ```
 
 ## 7. First admin login
 
-Open `https://financials.raumdock.org/admin/login`, sign in with
-`ADMIN_EMAIL` + the plaintext password you hashed in step 3.
+Open `https://financial.raumdock.org/admin/login`, sign in with `ADMIN_EMAIL`
+plus the plaintext password you hashed in step 4.
 
 ## 8. OBS overlay
 
-Browser Source URL pattern:
+Browser Source URL:
 
 ```
-https://financials.raumdock.org/overlay/financial?token=<PUBLIC_OVERLAY_TOKEN>&refresh=30
+https://financial.raumdock.org/overlay/financial?token=<PUBLIC_OVERLAY_TOKEN>&refresh=30
 ```
 
-Size: `1920x160` for the compact bar variant.
+Default compact bar size: `1920x160`. Transparent background.
 
 ## Update flow
 
@@ -123,23 +149,40 @@ docker exec cc-financial-postgres pg_dump -U cc_financial cc_financial \
   | gzip > "backup-$(date +%F).sql.gz"
 ```
 
-The `cc_financial_pgdata` volume persists across container rebuilds — only a
-`docker volume rm cc_financial_pgdata` loses data.
+The `cc_financial_pgdata` and `cc_financial_caddy_data` volumes persist
+across container rebuilds. Only `docker volume rm cc_financial_pgdata`
+deletes the DB.
 
 ## Rollback
 
 ```bash
-git log --oneline -5                    # find a good commit
+git log --oneline -5
 git checkout <sha>
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-## Ports recap
+## Troubleshooting
 
-| Component | Port | Exposure |
+**Caddy can't get a cert.** Most likely DNS isn't pointing at the front-edge
+yet, or the front-edge nginx stream block has a typo. Check Caddy logs:
+`docker compose -f docker-compose.prod.yml logs caddy`. The first cert request
+is rate-limited by Let's Encrypt — wait at least an hour between failed
+attempts.
+
+**Front-edge can reach :3100 but TLS fails.** Verify the front-edge is doing
+SNI passthrough (`ssl_preread on`) and **not** terminating TLS itself. If it
+terminates, Caddy will receive plain HTTP and the handshake breaks.
+
+**`prisma db push` refuses a schema change.** It's flagging a destructive
+change. Add the migration manually, see the "Update flow" note above.
+
+## Ports
+
+| Component | Listen | Reachable from |
 |---|---|---|
-| Next.js (cc-financial-web) | container 3000 → host `127.0.0.1:3100` | loopback only |
-| Postgres (cc-financial-postgres) | 5432 | docker network only |
-| Caddy → cc-financial | 443 (public) | public via Let's Encrypt |
+| caddy (this stack) | host `:3100` | front-edge nginx LAN side |
+| web (Next.js) | container `:3000` | docker network only |
+| postgres | container `:5432` | docker network only |
+| front-edge nginx | public `:443` | internet |
 
-No ports leak to the public internet except via Caddy.
+No port on this LXC is publicly reachable except via the front-edge.

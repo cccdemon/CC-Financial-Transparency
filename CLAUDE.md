@@ -16,14 +16,14 @@ Phase 1 scaffold + Phase 2 manual ledger skeleton landed. The stack is:
 
 Phases not yet started: Twitch EventSub integration, monthly review workflow, CSV export, full tax forecast UI.
 
-**Deployment artifacts** (target: `financials.raumdock.org`, behind existing Caddy):
+**Deployment** (target: `financial.raumdock.org`, LXC `10.10.10.99` behind a front-edge nginx SNI router that does TLS passthrough to `:3100`):
 
 - [Dockerfile](Dockerfile) — multi-stage, Next.js standalone output, runs as non-root
-- [docker-compose.prod.yml](docker-compose.prod.yml) — web + dedicated Postgres, web bound to `127.0.0.1:3100` (loopback only)
+- [docker-compose.prod.yml](docker-compose.prod.yml) — web + dedicated Postgres + **bundled Caddy**. Caddy binds host `:3100`, terminates TLS via Let's Encrypt TLS-ALPN-01 (port 80 isn't routed to us, so HTTP-01 is disabled), reverse-proxies to `web:3000`. Web has no host port — docker network only.
+- [docker/Caddyfile](docker/Caddyfile) — bundled Caddy config (uses `PUBLIC_HOSTNAME` + `CADDY_ACME_EMAIL` env vars)
 - [docker/entrypoint.sh](docker/entrypoint.sh) — runs `prisma db push` on boot (no migration history yet; see DEPLOY.md for when to graduate to `migrate deploy`)
-- [Caddyfile.snippet](Caddyfile.snippet) — site block to append to the host's existing Caddyfile
 - [.env.production.example](.env.production.example) — required env vars for prod compose
-- [DEPLOY.md](DEPLOY.md) — full runbook (DNS → secrets → up → Caddy reload → first login)
+- [DEPLOY.md](DEPLOY.md) — full runbook (front-edge nginx → DNS → secrets → up → first login)
 
 > Next 16 renamed `middleware.ts` → `proxy.ts`. Migration is optional but warned on build.
 

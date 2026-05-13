@@ -32,7 +32,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL required}
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?ADMIN_PASSWORD_HASH required}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET required}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://financials.raumdock.org}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://financial.raumdock.org}
       PUBLIC_OVERLAY_TOKEN: ${PUBLIC_OVERLAY_TOKEN:?PUBLIC_OVERLAY_TOKEN required}
       # Twitch is Phase 3 — leave empty until then.
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
@@ -41,14 +41,35 @@ services:
       TWITCH_BROADCASTER_LOGIN: ${TWITCH_BROADCASTER_LOGIN:-JustCallMeDeimos}
       TWITCH_EVENTSUB_SECRET: ${TWITCH_EVENTSUB_SECRET:-}
       TWITCH_REDIRECT_URI: ${TWITCH_REDIRECT_URI:-}
+    # No host port binding — only Caddy in this stack talks to it.
+    expose:
+      - "3000"
+    networks:
+      - cc_financial
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: cc-financial-caddy
+    restart: unless-stopped
+    depends_on:
+      - web
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-financial.raumdock.org}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:?CADDY_ACME_EMAIL required for Let's Encrypt}
     ports:
-      # Bind to loopback only — Caddy on the host reverse-proxies to this.
-      - "127.0.0.1:${WEB_HOST_PORT:-3100}:3000"
+      # Front-edge nginx forwards SNI passthrough from :443 to this host on :3100.
+      - "${CADDY_HOST_PORT:-3100}:3100"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - cc_financial_caddy_data:/data
+      - cc_financial_caddy_config:/config
     networks:
       - cc_financial
 
 volumes:
   cc_financial_pgdata:
+  cc_financial_caddy_data:
+  cc_financial_caddy_config:
 
 networks:
   cc_financial:
