@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
 import { parseTwitchPaymentHistoryCsv } from "@/lib/twitch-payment-import";
+import { TwitchPaymentImportForm } from "./TwitchPaymentImportForm";
 
 export const dynamic = "force-dynamic";
 
@@ -19,27 +20,17 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
     "use server";
     if (!(await getAdminSession())) redirect("/admin/login");
 
-    const file = formData.get("file");
     const pastedCsv = String(formData.get("csv") ?? "");
-    const occurredAtValue = String(formData.get("occurredAt") ?? "");
     const includeSubmitted = formData.get("includeSubmitted") === "on";
     const publicRows = formData.get("public") === "on";
 
-    const csv = file instanceof File && file.size > 0
-      ? await file.text()
-      : pastedCsv;
-    if (!csv.trim()) {
+    if (!pastedCsv.trim()) {
       redirect("/admin/income/import/twitch-payments?error=missing_csv");
-    }
-
-    const occurredAt = occurredAtValue ? new Date(`${occurredAtValue}T12:00:00Z`) : new Date();
-    if (!Number.isFinite(occurredAt.getTime())) {
-      redirect("/admin/income/import/twitch-payments?error=invalid_date");
     }
 
     let rows;
     try {
-      rows = parseTwitchPaymentHistoryCsv(csv);
+      rows = parseTwitchPaymentHistoryCsv(pastedCsv);
     } catch (e) {
       const message = e instanceof Error ? e.message : "invalid_csv";
       redirect(`/admin/income/import/twitch-payments?error=${encodeURIComponent(message)}`);
@@ -58,7 +49,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
 
       const data = {
         source: "manual_twitch_payout" as const,
-        occurredAt: row.occurredAt ?? occurredAt,
+        occurredAt: row.occurredAt ?? new Date(),
         grossAmount: row.amount,
         netAmount: row.amount,
         currency: row.currency,
@@ -112,7 +103,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
         </Link>
         <h1 className="text-xl font-semibold">Import Twitch payment history</h1>
         <p className="text-sm text-neutral-500">
-          Upload Twitch payment history. Plain CSV can include Date, Month, Approval date, or Genehmigungsdatum per row.
+          Upload or paste the basic Twitch CSV, preview each payment row, then add its payout month/date before import.
         </p>
       </div>
 
@@ -127,54 +118,7 @@ export default async function TwitchPaymentImportPage({ searchParams }: PageProp
         </p>
       )}
 
-      <form action={importPayments} className="space-y-4" encType="multipart/form-data">
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">CSV file</span>
-          <input
-            name="file"
-            type="file"
-            accept=".csv,text/csv"
-            className="block w-full rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
-          />
-        </label>
-
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Or paste CSV</span>
-          <textarea
-            name="csv"
-            rows={8}
-            className="block w-full rounded border border-neutral-300 px-3 py-2 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-950"
-            placeholder={`Month,Amount submitted,Payment method,Status\n2026-04,"USD 208,97",PayPal,Bezahlt\n2026-03,"USD 200,41",PayPal,Bezahlt`}
-          />
-        </label>
-
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Occurred at</span>
-          <input
-            name="occurredAt"
-            type="date"
-            defaultValue={new Date().toISOString().slice(0, 10)}
-            className="block w-full rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
-          />
-          <span className="text-xs text-neutral-500">
-            Used only for uploads that do not include a per-row Date, Month, Approval date, or Genehmigungsdatum column.
-          </span>
-        </label>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="includeSubmitted" />
-          Include submitted rows that are not paid yet
-        </label>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="public" defaultChecked />
-          Visible on public dashboard
-        </label>
-
-        <button className="rounded bg-neutral-900 px-3 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
-          Import payments
-        </button>
-      </form>
+      <TwitchPaymentImportForm importAction={importPayments} />
     </div>
   );
 }
