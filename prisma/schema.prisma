@@ -1,0 +1,268 @@
+// Learn more: https://pris.ly/d/prisma-schema
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum IncomeSource {
+  twitch_sub
+  twitch_resub
+  twitch_gift_sub
+  twitch_bits
+  twitch_hype_train
+  manual_twitch_payout
+  manual_ad_revenue
+  manual_sponsor
+  manual_other
+}
+
+enum ExpenseSource {
+  giveaway
+  hardware
+  software
+  hosting
+  fees
+  manual_other
+}
+
+enum Confidence {
+  actual
+  estimated
+  unverified
+}
+
+enum FundingType {
+  self
+  community
+  sponsor
+  mixed
+}
+
+enum MonthlyReviewStatus {
+  open
+  reviewed
+  locked
+}
+
+enum TwitchEventStatus {
+  processed
+  ignored
+  failed
+}
+
+enum OverlayTheme {
+  dark
+  light
+  transparent
+}
+
+enum OverlayMode {
+  bar
+  panel
+  lower_third
+  scene
+}
+
+enum OverlayPeriod {
+  current_month
+  year_to_date
+}
+
+enum FilingType {
+  single
+  joint
+}
+
+enum VatMode {
+  kleinunternehmer
+  regular_vat
+  unknown
+}
+
+enum ForecastConfidence {
+  rough
+  configured
+  reviewed
+}
+
+model IncomeEvent {
+  id          String       @id @default(cuid())
+  source      IncomeSource
+  occurredAt  DateTime     @map("occurred_at")
+  grossAmount Decimal      @map("gross_amount") @db.Decimal(12, 2)
+  netAmount   Decimal?     @map("net_amount") @db.Decimal(12, 2)
+  currency    String       @default("EUR")
+  confidence  Confidence
+  public      Boolean      @default(true)
+  description String?
+  externalId  String?      @unique @map("external_id")
+  rawPayload  Json?        @map("raw_payload")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@index([occurredAt])
+  @@index([source])
+  @@map("income_events")
+}
+
+model ExpenseEvent {
+  id          String        @id @default(cuid())
+  source      ExpenseSource
+  occurredAt  DateTime      @map("occurred_at")
+  amount      Decimal       @db.Decimal(12, 2)
+  currency    String        @default("EUR")
+  public      Boolean       @default(true)
+  description String?
+  receiptUrl  String?       @map("receipt_url")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  giveaway    Giveaway?
+
+  @@index([occurredAt])
+  @@index([source])
+  @@map("expense_events")
+}
+
+model Giveaway {
+  id             String        @id @default(cuid())
+  title          String
+  occurredAt     DateTime      @map("occurred_at")
+  itemName       String?       @map("item_name")
+  estimatedValue Decimal?      @map("estimated_value") @db.Decimal(12, 2)
+  actualCost     Decimal?      @map("actual_cost") @db.Decimal(12, 2)
+  currency       String        @default("EUR")
+  fundingType    FundingType   @map("funding_type")
+  public         Boolean       @default(true)
+  publicNote     String?       @map("public_note")
+  privateNote    String?       @map("private_note")
+  expenseEventId String?       @unique @map("expense_event_id")
+  expenseEvent   ExpenseEvent? @relation(fields: [expenseEventId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  @@index([occurredAt])
+  @@map("giveaways")
+}
+
+model MonthlyReview {
+  id         String              @id @default(cuid())
+  month      String              @unique
+  status     MonthlyReviewStatus @default(open)
+  reviewedAt DateTime?           @map("reviewed_at")
+  reviewedBy String?             @map("reviewed_by")
+  notes      String?
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
+
+  @@map("monthly_reviews")
+}
+
+model TwitchEventLog {
+  id                String            @id @default(cuid())
+  eventsubMessageId String            @unique @map("eventsub_message_id")
+  eventType         String            @map("event_type")
+  eventVersion      String            @map("event_version")
+  occurredAt        DateTime          @map("occurred_at")
+  processedAt       DateTime?         @map("processed_at")
+  status            TwitchEventStatus
+  rawPayload        Json              @map("raw_payload")
+  error             String?
+
+  @@index([eventType])
+  @@map("twitch_event_log")
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+model OverlayConfig {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique
+  enabled         Boolean       @default(true)
+  theme           OverlayTheme  @default(dark)
+  mode            OverlayMode   @default(bar)
+  period          OverlayPeriod @default(current_month)
+  showIncome      Boolean       @default(true) @map("show_income")
+  showExpenses    Boolean       @default(true) @map("show_expenses")
+  showGiveaways   Boolean       @default(true) @map("show_giveaways")
+  showTaxReserve  Boolean       @default(false) @map("show_tax_reserve")
+  showNetResult   Boolean       @default(true) @map("show_net_result")
+  refreshSeconds  Int           @default(30) @map("refresh_seconds")
+  publicTokenHash String?       @map("public_token_hash")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@map("overlay_configs")
+}
+
+model TaxProfile {
+  id                         String     @id @default(cuid())
+  taxYear                    Int        @map("tax_year")
+  country                    String     @default("DE")
+  filingType                 FilingType @map("filing_type")
+  federalState               String?    @map("federal_state")
+  churchTaxEnabled           Boolean    @default(false) @map("church_tax_enabled")
+  churchTaxRate              Decimal?   @map("church_tax_rate") @db.Decimal(5, 4)
+  solidaritySurchargeEnabled Boolean    @default(false) @map("solidarity_surcharge_enabled")
+  nonStreamTaxableIncome     Decimal    @default(0) @map("non_stream_taxable_income") @db.Decimal(12, 2)
+  deductibleExpenseEstimate  Decimal    @default(0) @map("deductible_expense_estimate") @db.Decimal(12, 2)
+  alreadyPaidTax             Decimal    @default(0) @map("already_paid_tax") @db.Decimal(12, 2)
+  vatMode                    VatMode    @default(unknown) @map("vat_mode")
+  publicTaxReserveEnabled    Boolean    @default(false) @map("public_tax_reserve_enabled")
+  createdAt                  DateTime   @default(now()) @map("created_at")
+  updatedAt                  DateTime   @updatedAt @map("updated_at")
+
+  @@unique([taxYear, country])
+  @@map("tax_profiles")
+}
+
+model TaxTariff {
+  id              String    @id @default(cuid())
+  taxYear         Int       @map("tax_year")
+  country         String    @default("DE")
+  tariffJson      Json      @map("tariff_json")
+  sourceUrl       String?   @map("source_url")
+  sourceCheckedAt DateTime? @map("source_checked_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@unique([taxYear, country])
+  @@map("tax_tariffs")
+}
+
+model TaxForecast {
+  id                           String             @id @default(cuid())
+  taxYear                      Int                @map("tax_year")
+  period                       String
+  streamIncome                 Decimal            @map("stream_income") @db.Decimal(12, 2)
+  streamExpenses               Decimal            @map("stream_expenses") @db.Decimal(12, 2)
+  streamProfit                 Decimal            @map("stream_profit") @db.Decimal(12, 2)
+  projectedAnnualStreamProfit  Decimal            @map("projected_annual_stream_profit") @db.Decimal(12, 2)
+  otherTaxableIncome           Decimal            @map("other_taxable_income") @db.Decimal(12, 2)
+  estimatedTaxableIncome       Decimal            @map("estimated_taxable_income") @db.Decimal(12, 2)
+  estimatedIncomeTaxTotal      Decimal            @map("estimated_income_tax_total") @db.Decimal(12, 2)
+  estimatedStreamTaxShare      Decimal            @map("estimated_stream_tax_share") @db.Decimal(12, 2)
+  estimatedSolidaritySurcharge Decimal            @map("estimated_solidarity_surcharge") @db.Decimal(12, 2)
+  estimatedChurchTax           Decimal            @map("estimated_church_tax") @db.Decimal(12, 2)
+  estimatedTotalTaxReserve     Decimal            @map("estimated_total_tax_reserve") @db.Decimal(12, 2)
+  alreadyReserved              Decimal            @default(0) @map("already_reserved") @db.Decimal(12, 2)
+  recommendedAdditionalReserve Decimal            @map("recommended_additional_reserve") @db.Decimal(12, 2)
+  confidence                   ForecastConfidence
+  createdAt                    DateTime           @default(now()) @map("created_at")
+  updatedAt                    DateTime           @updatedAt @map("updated_at")
+
+  @@index([taxYear, period])
+  @@map("tax_forecasts")
+}
