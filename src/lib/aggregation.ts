@@ -1,6 +1,7 @@
 import { Prisma, type Confidence, type IncomeSource } from "@prisma/client";
 import { db } from "@/lib/db";
 import { periodBounds, yearBounds } from "@/lib/period";
+import { recurringExpenseWhereForPeriod, recurringInstancesForPeriod } from "@/lib/recurring-expenses";
 
 const ZERO = new Prisma.Decimal(0);
 
@@ -21,7 +22,7 @@ export interface PublicMonthlySummary {
 export async function getPublicMonthlySummary(period: string): Promise<PublicMonthlySummary> {
   const { start, end } = periodBounds(period);
 
-  const [incomeRows, expenseRows, giveawayRows] = await Promise.all([
+  const [incomeRows, expenseRows, giveawayRows, recurringRules] = await Promise.all([
     db.incomeEvent.findMany({
       where: { public: true, occurredAt: { gte: start, lt: end } },
       select: { source: true, grossAmount: true, netAmount: true, confidence: true, updatedAt: true },
@@ -34,6 +35,9 @@ export async function getPublicMonthlySummary(period: string): Promise<PublicMon
       where: { public: true, occurredAt: { gte: start, lt: end } },
       select: { actualCost: true, estimatedValue: true, updatedAt: true },
     }),
+    db.recurringExpense.findMany({
+      where: recurringExpenseWhereForPeriod(period, true),
+    }),
   ]);
 
   const income = incomeRows.reduce(
@@ -41,7 +45,10 @@ export async function getPublicMonthlySummary(period: string): Promise<PublicMon
     ZERO,
   );
 
-  const expenses = expenseRows.reduce((acc, row) => acc.add(row.amount), ZERO);
+  const recurringExpenses = recurringInstancesForPeriod(recurringRules, period);
+  const expenses = expenseRows
+    .reduce((acc, row) => acc.add(row.amount), ZERO)
+    .add(recurringExpenses.reduce((acc, row) => acc.add(row.amount), ZERO));
 
   const giveawayTotal = giveawayRows.reduce(
     (acc, row) => acc.add(row.actualCost ?? row.estimatedValue ?? ZERO),
@@ -55,6 +62,7 @@ export async function getPublicMonthlySummary(period: string): Promise<PublicMon
     ...incomeRows.map((r) => r.updatedAt),
     ...expenseRows.map((r) => r.updatedAt),
     ...giveawayRows.map((r) => r.updatedAt),
+    ...recurringRules.map((r) => r.updatedAt),
   ]);
 
   return {
@@ -98,7 +106,7 @@ export async function getPublicYearlySummary(
 ): Promise<PublicYearlySummary> {
   const { start, end } = yearBounds(year);
 
-  const [incomeRows, expenseRows, giveawayRows] = await Promise.all([
+  const [incomeRows, expenseRows, giveawayRows, recurringRules] = await Promise.all([
     db.incomeEvent.findMany({
       where: { public: true, occurredAt: { gte: start, lt: end } },
       select: {
@@ -123,13 +131,31 @@ export async function getPublicYearlySummary(
         updatedAt: true,
       },
     }),
+    db.recurringExpense.findMany({
+      where: {
+        startMonth: { lte: `${year}-12` },
+        OR: [{ endMonth: null }, { endMonth: { gte: `${year}-01` } }],
+        public: true,
+      },
+    }),
   ]);
 
   const income = incomeRows.reduce(
     (acc, row) => acc.add(row.netAmount ?? row.grossAmount),
     ZERO,
   );
-  const expenses = expenseRows.reduce((acc, row) => acc.add(row.amount), ZERO);
+  const recurringByMonth = new Map<string, Prisma.Decimal>();
+  for (let m = 0; m < 12; m++) {
+    const period = `${year}-${String(m + 1).padStart(2, "0")}`;
+    recurringByMonth.set(
+      period,
+      recurringInstancesForPeriod(recurringRules, period).reduce((acc, row) => acc.add(row.amount), ZERO),
+    );
+  }
+
+  const expenses = expenseRows
+    .reduce((acc, row) => acc.add(row.amount), ZERO)
+    .add([...recurringByMonth.values()].reduce((acc, value) => acc.add(value), ZERO));
   const giveawayTotal = giveawayRows.reduce(
     (acc, row) => acc.add(row.actualCost ?? row.estimatedValue ?? ZERO),
     ZERO,
@@ -149,7 +175,8 @@ export async function getPublicYearlySummary(
       .reduce((acc, r) => acc.add(r.netAmount ?? r.grossAmount), ZERO);
     const monthExpenses = expenseRows
       .filter((r) => inMonth(r.occurredAt))
-      .reduce((acc, r) => acc.add(r.amount), ZERO);
+      .reduce((acc, r) => acc.add(r.amount), ZERO)
+      .add(recurringByMonth.get(`${year}-${String(m + 1).padStart(2, "0")}`) ?? ZERO);
     const monthGiveaways = giveawayRows
       .filter((r) => inMonth(r.occurredAt))
       .reduce((acc, r) => acc.add(r.actualCost ?? r.estimatedValue ?? ZERO), ZERO);
@@ -167,6 +194,7 @@ export async function getPublicYearlySummary(
     ...incomeRows.map((r) => r.updatedAt),
     ...expenseRows.map((r) => r.updatedAt),
     ...giveawayRows.map((r) => r.updatedAt),
+    ...recurringRules.map((r) => r.updatedAt),
   ]);
 
   return {

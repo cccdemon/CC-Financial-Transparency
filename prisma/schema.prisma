@@ -91,6 +91,11 @@ enum ForecastConfidence {
   reviewed
 }
 
+enum RecurrenceFrequency {
+  monthly
+  yearly
+}
+
 model IncomeEvent {
   id          String       @id @default(cuid())
   source      IncomeSource
@@ -127,6 +132,25 @@ model ExpenseEvent {
   @@index([occurredAt])
   @@index([source])
   @@map("expense_events")
+}
+
+model RecurringExpense {
+  id          String              @id @default(cuid())
+  name        String
+  source      ExpenseSource       @default(hosting)
+  amount      Decimal             @db.Decimal(12, 2)
+  currency    String              @default("EUR")
+  frequency   RecurrenceFrequency @default(monthly)
+  startMonth  String              @map("start_month")
+  endMonth    String?             @map("end_month")
+  public      Boolean             @default(true)
+  description String?
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  @@index([startMonth])
+  @@index([endMonth])
+  @@map("recurring_expenses")
 }
 
 model Giveaway {

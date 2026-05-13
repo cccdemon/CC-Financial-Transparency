@@ -27,9 +27,17 @@ const schema = z.object({
   description: z.string().optional(),
 });
 
-export default async function EditIncomePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditIncomePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
+}) {
   if (!(await getAdminSession())) redirect("/admin/login");
   const { id } = await params;
+  const { returnTo } = await searchParams;
+  const redirectTo = safeReturnTo(returnTo, "/admin/income");
   const row = await db.incomeEvent.findUnique({ where: { id } });
   if (!row) notFound();
 
@@ -50,14 +58,14 @@ export default async function EditIncomePage({ params }: { params: Promise<{ id:
         description: data.description || null,
       },
     });
-    redirect("/admin/income");
+    redirect(redirectTo);
   }
 
   async function remove() {
     "use server";
     if (!(await getAdminSession())) redirect("/admin/login");
     await db.incomeEvent.delete({ where: { id } });
-    redirect("/admin/income");
+    redirect(redirectTo);
   }
 
   const occurredAtLocal = toLocalInput(row.occurredAt);
@@ -89,6 +97,11 @@ export default async function EditIncomePage({ params }: { params: Promise<{ id:
 
 function toLocalInput(d: Date): string {
   return d.toISOString().slice(0, 16);
+}
+
+function safeReturnTo(value: string | undefined, fallback: string): string {
+  if (!value || !value.startsWith("/admin/") || value.startsWith("//")) return fallback;
+  return value;
 }
 
 function Field(props: { name: string; label: string; type: string; required?: boolean; step?: string; defaultValue?: string }) {

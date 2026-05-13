@@ -18,9 +18,17 @@ const schema = z.object({
   privateNote: z.string().optional(),
 });
 
-export default async function EditGiveawayPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditGiveawayPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
+}) {
   if (!(await getAdminSession())) redirect("/admin/login");
   const { id } = await params;
+  const { returnTo } = await searchParams;
+  const redirectTo = safeReturnTo(returnTo, "/admin/giveaways");
   const row = await db.giveaway.findUnique({ where: { id } });
   if (!row) notFound();
 
@@ -89,7 +97,7 @@ export default async function EditGiveawayPage({ params }: { params: Promise<{ i
         },
       });
     });
-    redirect("/admin/giveaways");
+    redirect(redirectTo);
   }
 
   async function remove() {
@@ -103,7 +111,7 @@ export default async function EditGiveawayPage({ params }: { params: Promise<{ i
         await tx.expenseEvent.delete({ where: { id: existing.expenseEventId } });
       }
     });
-    redirect("/admin/giveaways");
+    redirect(redirectTo);
   }
 
   const occurredAtLocal = row.occurredAt.toISOString().slice(0, 16);
@@ -141,6 +149,11 @@ export default async function EditGiveawayPage({ params }: { params: Promise<{ i
       </form>
     </div>
   );
+}
+
+function safeReturnTo(value: string | undefined, fallback: string): string {
+  if (!value || !value.startsWith("/admin/") || value.startsWith("//")) return fallback;
+  return value;
 }
 
 function Input(props: { name: string; type: string; label: string; required?: boolean; step?: string; defaultValue?: string }) {

@@ -15,9 +15,17 @@ const schema = z.object({
   receiptUrl: z.string().optional(),
 });
 
-export default async function EditExpensePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditExpensePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
+}) {
   if (!(await getAdminSession())) redirect("/admin/login");
   const { id } = await params;
+  const { returnTo } = await searchParams;
+  const redirectTo = safeReturnTo(returnTo, "/admin/expenses");
   const row = await db.expenseEvent.findUnique({ where: { id }, include: { giveaway: true } });
   if (!row) notFound();
 
@@ -37,14 +45,14 @@ export default async function EditExpensePage({ params }: { params: Promise<{ id
         receiptUrl: data.receiptUrl || null,
       },
     });
-    redirect("/admin/expenses");
+    redirect(redirectTo);
   }
 
   async function remove() {
     "use server";
     if (!(await getAdminSession())) redirect("/admin/login");
     await db.expenseEvent.delete({ where: { id } });
-    redirect("/admin/expenses");
+    redirect(redirectTo);
   }
 
   const occurredAtLocal = row.occurredAt.toISOString().slice(0, 16);
@@ -84,6 +92,11 @@ export default async function EditExpensePage({ params }: { params: Promise<{ id
       </form>
     </div>
   );
+}
+
+function safeReturnTo(value: string | undefined, fallback: string): string {
+  if (!value || !value.startsWith("/admin/") || value.startsWith("//")) return fallback;
+  return value;
 }
 
 function Input(props: { name: string; type: string; label: string; required?: boolean; step?: string; defaultValue?: string }) {
