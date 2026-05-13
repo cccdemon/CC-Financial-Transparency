@@ -3,6 +3,8 @@ import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
+import { currentMonthPeriod } from "@/lib/period";
+import { recurringInstancesForPeriod } from "@/lib/recurring-expenses";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +13,7 @@ const ZERO = new Prisma.Decimal(0);
 export default async function AdminMonthsPage() {
   if (!(await getAdminSession())) redirect("/admin/login");
 
-  const [incomeRows, expenseRows, giveawayRows] = await Promise.all([
+  const [incomeRows, expenseRows, giveawayRows, recurringRules] = await Promise.all([
     db.incomeEvent.findMany({
       select: { occurredAt: true, grossAmount: true, netAmount: true, currency: true },
       orderBy: { occurredAt: "desc" },
@@ -24,6 +26,7 @@ export default async function AdminMonthsPage() {
       select: { occurredAt: true, actualCost: true, estimatedValue: true, currency: true },
       orderBy: { occurredAt: "desc" },
     }),
+    db.recurringExpense.findMany(),
   ]);
 
   const months = new Map<string, {
@@ -54,6 +57,15 @@ export default async function AdminMonthsPage() {
     current.giveaways = current.giveaways.add(row.actualCost ?? row.estimatedValue ?? ZERO);
     current.currencies.add(row.currency);
     current.entries += 1;
+  }
+  const latestPeriod = currentMonthPeriod();
+  for (const period of recurringPeriods(recurringRules, latestPeriod)) {
+    const current = ensureMonth(months, period);
+    for (const recurring of recurringInstancesForPeriod(recurringRules, period)) {
+      current.expenses = current.expenses.add(recurring.amount);
+      current.currencies.add(recurring.currency);
+      current.entries += 1;
+    }
   }
 
   const rows = [...months.entries()]
@@ -126,6 +138,28 @@ function ensureMonth(
 
 function monthKey(date: Date): string {
   return date.toISOString().slice(0, 7);
+}
+
+function recurringPeriods(
+  rules: Array<{ startMonth: string; endMonth: string | null }>,
+  latestPeriod: string,
+): string[] {
+  const periods = new Set<string>();
+  for (const rule of rules) {
+    let period = rule.startMonth;
+    const end = rule.endMonth && rule.endMonth < latestPeriod ? rule.endMonth : latestPeriod;
+    while (period <= end) {
+      periods.add(period);
+      period = shiftPeriod(period, 1);
+    }
+  }
+  return [...periods];
+}
+
+function shiftPeriod(period: string, deltaMonths: number): string {
+  const [year, month] = period.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + deltaMonths, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function formatAmount(value: number, currency: string | null): string {

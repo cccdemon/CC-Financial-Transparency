@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
 import { isValidPeriod, periodBounds } from "@/lib/period";
+import { recurringExpenseWhereForPeriod, recurringInstancesForPeriod } from "@/lib/recurring-expenses";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export default async function AdminMonthPage({ params }: { params: Promise<{ per
   if (!isValidPeriod(period)) notFound();
 
   const { start, end } = periodBounds(period);
-  const [incomeRows, expenseRows, giveawayRows] = await Promise.all([
+  const [incomeRows, expenseRows, giveawayRows, recurringRules] = await Promise.all([
     db.incomeEvent.findMany({
       where: { occurredAt: { gte: start, lt: end } },
       orderBy: { occurredAt: "asc" },
@@ -25,10 +26,17 @@ export default async function AdminMonthPage({ params }: { params: Promise<{ per
       where: { occurredAt: { gte: start, lt: end } },
       orderBy: { occurredAt: "asc" },
     }),
+    db.recurringExpense.findMany({
+      where: recurringExpenseWhereForPeriod(period),
+      orderBy: { name: "asc" },
+    }),
   ]);
 
+  const recurringRows = recurringInstancesForPeriod(recurringRules, period);
   const income = incomeRows.reduce((acc, row) => acc + Number(row.netAmount ?? row.grossAmount), 0);
-  const expenses = expenseRows.reduce((acc, row) => acc + Number(row.amount), 0);
+  const expenses =
+    expenseRows.reduce((acc, row) => acc + Number(row.amount), 0) +
+    recurringRows.reduce((acc, row) => acc + Number(row.amount), 0);
   const giveaways = giveawayRows.reduce((acc, row) => acc + Number(row.actualCost ?? row.estimatedValue ?? 0), 0);
   const returnTo = `/admin/months/${period}`;
 
@@ -96,9 +104,12 @@ export default async function AdminMonthPage({ params }: { params: Promise<{ per
       <section className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="font-medium">Expenses</h2>
-          <Link href="/admin/expenses/new" className="text-sm text-neutral-500 hover:underline">New expense</Link>
+          <div className="flex gap-3 text-sm">
+            <Link href="/admin/expenses/new" className="text-neutral-500 hover:underline">New expense</Link>
+            <Link href="/admin/recurring-expenses/new" className="text-neutral-500 hover:underline">New recurring</Link>
+          </div>
         </div>
-        {expenseRows.length === 0 ? (
+        {expenseRows.length === 0 && recurringRows.length === 0 ? (
           <p className="text-sm text-neutral-500">No expenses in this month.</p>
         ) : (
           <table className="w-full text-sm">
@@ -112,6 +123,17 @@ export default async function AdminMonthPage({ params }: { params: Promise<{ per
               </tr>
             </thead>
             <tbody>
+              {recurringRows.map((row) => (
+                <tr key={`recurring-${row.rule.id}`} className="border-b last:border-0">
+                  <td className="py-2 tabular-nums">{period}</td>
+                  <td className="py-2">{row.rule.source}</td>
+                  <td className="py-2 text-right tabular-nums">{formatCurrency(Number(row.amount), row.currency)}</td>
+                  <td className="py-2">{row.description} ({row.rule.frequency})</td>
+                  <td className="py-2 text-right">
+                    <Link href={`/admin/recurring-expenses/${row.rule.id}`} className="text-xs text-neutral-500 hover:underline">Edit rule</Link>
+                  </td>
+                </tr>
+              ))}
               {expenseRows.map((row) => (
                 <tr key={row.id} className="border-b last:border-0">
                   <td className="py-2 tabular-nums">{formatDate(row.occurredAt)}</td>

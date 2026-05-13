@@ -156,15 +156,15 @@ function MonthlyTrend({ summary, max }: { summary: PublicYearlySummary; max: num
           const incomeH = (m.income / max) * 100;
           const costsH = ((m.expenses + m.giveaways) / max) * 100;
           return (
-            <div key={m.period} className="flex flex-1 flex-col items-center gap-1">
-              <div className="flex h-full w-full items-end gap-0.5">
+            <div key={m.period} className="flex h-full flex-1 flex-col items-center gap-1">
+              <div className="flex min-h-0 w-full flex-1 items-end gap-0.5">
                 <div
-                  className="flex-1 bg-emerald-500/70 dark:bg-emerald-400/70"
+                  className="min-h-px flex-1 bg-emerald-500/70 dark:bg-emerald-400/70"
                   style={{ height: `${incomeH}%` }}
                   title={`Income ${formatCurrency(m.income, summary.currency)}`}
                 />
                 <div
-                  className="flex-1 bg-rose-500/70 dark:bg-rose-400/70"
+                  className="min-h-px flex-1 bg-rose-500/70 dark:bg-rose-400/70"
                   style={{ height: `${costsH}%` }}
                   title={`Costs ${formatCurrency(m.expenses + m.giveaways, summary.currency)}`}
                 />
