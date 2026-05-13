@@ -5,10 +5,15 @@ import { exchangeCodeForTokens, verifyOAuthState } from "@/lib/twitch";
 
 const STATE_COOKIE = "cc-financial-twitch-oauth";
 
+function adminUrl(path: string, req: NextRequest): URL {
+  const base = process.env.PUBLIC_BASE_URL ?? req.nextUrl.origin;
+  return new URL(path, base);
+}
+
 export async function GET(req: NextRequest) {
   const session = await getAdminSession();
   if (!session) {
-    return NextResponse.redirect(new URL("/admin/login", req.url));
+    return NextResponse.redirect(adminUrl("/admin/login", req));
   }
 
   const code = req.nextUrl.searchParams.get("code");
@@ -16,10 +21,10 @@ export async function GET(req: NextRequest) {
   const error = req.nextUrl.searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(new URL(`/admin/twitch?error=${encodeURIComponent(error)}`, req.url));
+    return NextResponse.redirect(adminUrl(`/admin/twitch?error=${encodeURIComponent(error)}`, req));
   }
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/admin/twitch?error=missing_params", req.url));
+    return NextResponse.redirect(adminUrl("/admin/twitch?error=missing_params", req));
   }
 
   const store = await cookies();
@@ -27,19 +32,19 @@ export async function GET(req: NextRequest) {
   store.delete(STATE_COOKIE);
 
   if (!cookieValue) {
-    return NextResponse.redirect(new URL("/admin/twitch?error=state_missing", req.url));
+    return NextResponse.redirect(adminUrl("/admin/twitch?error=state_missing", req));
   }
   const [storedState, signed] = cookieValue.split(".");
   if (storedState !== state || !verifyOAuthState(state, signed)) {
-    return NextResponse.redirect(new URL("/admin/twitch?error=state_mismatch", req.url));
+    return NextResponse.redirect(adminUrl("/admin/twitch?error=state_mismatch", req));
   }
 
   try {
     await exchangeCodeForTokens(code);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "exchange_failed";
-    return NextResponse.redirect(new URL(`/admin/twitch?error=${encodeURIComponent(msg)}`, req.url));
+    return NextResponse.redirect(adminUrl(`/admin/twitch?error=${encodeURIComponent(msg)}`, req));
   }
 
-  return NextResponse.redirect(new URL("/admin/twitch?connected=1", req.url));
+  return NextResponse.redirect(adminUrl("/admin/twitch?connected=1", req));
 }
