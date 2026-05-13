@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cc-financial-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cc_financial}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+      POSTGRES_DB: ${POSTGRES_DB:-cc_financial}
+    volumes:
+      - cc_financial_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cc_financial} -d ${POSTGRES_DB:-cc_financial}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cc_financial
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cc-financial-web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cc_financial}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-cc_financial}?schema=public
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL required}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?ADMIN_PASSWORD_HASH required}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET required}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://financials.raumdock.org}
+      PUBLIC_OVERLAY_TOKEN: ${PUBLIC_OVERLAY_TOKEN:?PUBLIC_OVERLAY_TOKEN required}
+      # Twitch is Phase 3 — leave empty until then.
+      TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
+      TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
+      TWITCH_BROADCASTER_ID: ${TWITCH_BROADCASTER_ID:-}
+      TWITCH_BROADCASTER_LOGIN: ${TWITCH_BROADCASTER_LOGIN:-JustCallMeDeimos}
+      TWITCH_EVENTSUB_SECRET: ${TWITCH_EVENTSUB_SECRET:-}
+      TWITCH_REDIRECT_URI: ${TWITCH_REDIRECT_URI:-}
+    ports:
+      # Bind to loopback only — Caddy on the host reverse-proxies to this.
+      - "127.0.0.1:${WEB_HOST_PORT:-3100}:3000"
+    networks:
+      - cc_financial
+
+volumes:
+  cc_financial_pgdata:
+
+networks:
+  cc_financial:
+    name: cc_financial

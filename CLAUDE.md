@@ -14,7 +14,16 @@ Phase 1 scaffold + Phase 2 manual ledger skeleton landed. The stack is:
 - **docker-compose.yml** at the repo root runs the local Postgres.
 - Admin auth: single-admin cookie session signed with `SESSION_SECRET`, credentials from `ADMIN_EMAIL` + bcrypt `ADMIN_PASSWORD_HASH`. The middleware in [src/middleware.ts](src/middleware.ts) gates `/admin/*` on cookie presence only — every admin server component must still call `getAdminSession()` to re-verify (the middleware runs under Edge runtime and cannot use Node crypto).
 
-Phases not yet started: Twitch EventSub integration, monthly review workflow, CSV export, Dockerfile/production deploy, full tax forecast UI.
+Phases not yet started: Twitch EventSub integration, monthly review workflow, CSV export, full tax forecast UI.
+
+**Deployment artifacts** (target: `financials.raumdock.org`, behind existing Caddy):
+
+- [Dockerfile](Dockerfile) — multi-stage, Next.js standalone output, runs as non-root
+- [docker-compose.prod.yml](docker-compose.prod.yml) — web + dedicated Postgres, web bound to `127.0.0.1:3100` (loopback only)
+- [docker/entrypoint.sh](docker/entrypoint.sh) — runs `prisma db push` on boot (no migration history yet; see DEPLOY.md for when to graduate to `migrate deploy`)
+- [Caddyfile.snippet](Caddyfile.snippet) — site block to append to the host's existing Caddyfile
+- [.env.production.example](.env.production.example) — required env vars for prod compose
+- [DEPLOY.md](DEPLOY.md) — full runbook (DNS → secrets → up → Caddy reload → first login)
 
 > Next 16 renamed `middleware.ts` → `proxy.ts`. Migration is optional but warned on build.
 
