@@ -17,9 +17,14 @@ export default async function IncomeListPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Income events</h1>
-        <Link href="/admin/income/new" className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
-          + New income
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/admin/income/import/twitch-payments" className="rounded border border-neutral-300 px-3 py-1.5 text-sm font-medium dark:border-neutral-700">
+            Import Twitch payments
+          </Link>
+          <Link href="/admin/income/new" className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
+            + New income
+          </Link>
+        </div>
       </div>
       {rows.length === 0 ? (
         <p className="text-sm text-neutral-500">No income recorded yet.</p>
