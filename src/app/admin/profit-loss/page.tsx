@@ -34,9 +34,6 @@ export default async function ProfitLossPage({ searchParams }: PageProps) {
           <a href={`/api/admin/profit-loss.csv?year=${year}`} className="rounded border border-neutral-300 px-3 py-1.5 dark:border-neutral-700">
             CSV
           </a>
-          <button onClick={undefined} className="rounded bg-neutral-900 px-3 py-1.5 font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
-            Druck über Browser
-          </button>
         </div>
       </div>
 
