@@ -16,6 +16,15 @@ const schema = z.object({
   receiptUrl: z.string().optional(),
 });
 
+const allowedReceiptTypes = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+];
+const maxReceiptBytes = 5_000_000;
+
 export default async function EditExpensePage({
   params,
   searchParams,
@@ -35,17 +44,40 @@ export default async function EditExpensePage({
     await assertSameOriginRequest();
     if (!(await getAdminSession())) redirect("/admin/login");
     const data = schema.parse(Object.fromEntries(formData));
+    const receiptFile = formData.get("receiptFile") as File | null;
+    const removeReceipt = formData.get("removeReceipt") === "on";
+    const updateData: Record<string, unknown> = {
+      source: data.source,
+      occurredAt: new Date(data.occurredAt),
+      amount: data.amount,
+      currency: data.currency || "EUR",
+      public: data.public === "on",
+      description: data.description || null,
+      receiptUrl: data.receiptUrl || null,
+    };
+
+    if (removeReceipt) {
+      updateData.receiptFileName = null;
+      updateData.receiptMimeType = null;
+      updateData.receiptData = null;
+    }
+
+    if (receiptFile && receiptFile.size > 0) {
+      if (!allowedReceiptTypes.includes(receiptFile.type)) {
+        throw new Error("Receipt must be PDF or image.");
+      }
+      if (receiptFile.size > maxReceiptBytes) {
+        throw new Error("Receipt file is too large.");
+      }
+      const buffer = await receiptFile.arrayBuffer();
+      updateData.receiptFileName = receiptFile.name;
+      updateData.receiptMimeType = receiptFile.type || "application/octet-stream";
+      updateData.receiptData = Buffer.from(buffer);
+    }
+
     await db.expenseEvent.update({
       where: { id },
-      data: {
-        source: data.source,
-        occurredAt: new Date(data.occurredAt),
-        amount: data.amount,
-        currency: data.currency || "EUR",
-        public: data.public === "on",
-        description: data.description || null,
-        receiptUrl: data.receiptUrl || null,
-      },
+      data: updateData,
     });
     redirect(redirectTo);
   }
@@ -68,7 +100,7 @@ export default async function EditExpensePage({
           Linked to giveaway: <strong>{row.giveaway.title}</strong>. Deleting this expense will unlink it.
         </p>
       )}
-      <form action={update} className="space-y-4">
+      <form action={update} encType="multipart/form-data" className="space-y-4">
         <label className="block space-y-1">
           <span className="text-sm font-medium">Source</span>
           <select name="source" defaultValue={row.source} className="block w-full rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950">
@@ -84,6 +116,30 @@ export default async function EditExpensePage({
         </label>
         <Input name="description" type="text" label="Description" defaultValue={row.description ?? ""} />
         <Input name="receiptUrl" type="url" label="Receipt URL (optional)" defaultValue={row.receiptUrl ?? ""} />
+        {row.receiptFileName ? (
+          <div className="space-y-2">
+            <p className="text-sm text-neutral-600">Aktuelle Rechnung: {row.receiptFileName}</p>
+            <a
+              href={`/api/admin/expenses/${row.id}/receipt`}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              Rechnung herunterladen
+            </a>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="removeReceipt" />
+              Entferne hochgeladene Rechnung
+            </label>
+          </div>
+        ) : null}
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">Rechnung hochladen (PDF oder Bild)</span>
+          <input
+            name="receiptFile"
+            type="file"
+            accept=".pdf,image/*"
+            className="block w-full rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+          />
+        </label>
         <button className="rounded bg-neutral-900 px-3 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
           Save
         </button>
